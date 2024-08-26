@@ -1,0 +1,60 @@
+<html>
+<head>
+<title>Polygon Area</title>
+
+<style>
+
+div.outer {
+  width: 50%;
+  height: 100%;
+  float: left;
+}
+
+.error {
+  color: #f00;
+}
+
+canvas {
+  border: 1px solid black;
+}
+
+</style>
+
+<script src="main.js"></script>
+
+</head>
+
+<body>
+
+<div class="outer">
+
+<p>
+Input the measurements here, heading in degrees, followed by the distance. Use a
+consistent unit for distance, and this will compute the area in unit^2, whatever
+unit you choose. You may wish to convert that to something else later.
+</p>
+
+<textarea id="data" rows="20" cols="20">
+</textarea>
+
+<br/>
+Error (.01=1%): <input type="text" id="error" value="0.01"/>
+
+<br/>
+<input type="button" id="compute" value="Compute" />
+
+<div id="errorOutput" class="error">
+</div>
+
+<div id="successOutput">
+</div>
+
+</div>
+
+<div class="outer">
+<canvas id="canvas" width="500px" height="500px"></canvas>
+</div>
+
+
+</body>
+</html>
