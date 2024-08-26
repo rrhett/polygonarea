@@ -59,9 +59,14 @@ function computePolygon() {
     throw `error ${error} must be within (0, 0.5)`;
   }
 
-  const area = computeArea(adjCoords, box, error);
+  const result = computeArea(adjCoords, box, error);
+  const area = result[0];
+  const boxes = result[1];
 
   document.getElementById('successOutput').innerHTML = `Area is ${area}`;
+
+  // Render the boxes covering the polygon one at a time:
+  renderArea(boxes);
 }
 
 /**
@@ -267,7 +272,7 @@ function subdivide(box) {
     [minX, minY + dy / 2, minX + dx / 2, maxY],
     [minX + dx / 2, minY + dy / 2, maxX, maxY],
     [minX, minY, minX + dx / 2, minY + dy / 2],
-    [minX + dx / 2, minY, minX + dx / 2, minY + dy / 2]
+    [minX + dx / 2, minY, maxX, minY + dy / 2]
   ];
 }
 
@@ -352,6 +357,7 @@ function computeArea(polygon, boundingBox, maxError) {
 
   // First, seed the list of boxes to check by subdividing the bounding box.
   const boxes = subdivide(boundingBox);
+  const boxesInPolygon = [];
   var area = 0;
   // Initially, all boxes are not yet assessed so they count as possible error.
   var error = boxes.reduce((acc, box) => acc + boxArea(box), 0);
@@ -367,6 +373,7 @@ function computeArea(polygon, boundingBox, maxError) {
     console.log(`Assessment = ${assessment}`);
     if (1 === assessment) {
       area += boxArea(box);
+      boxesInPolygon.push(box);
     } else if (0 === assessment) {
       // Do nothing. The box is fully outside the polygon, so we can drop it.
     } else if (-1 === assessment) {
@@ -377,5 +384,22 @@ function computeArea(polygon, boundingBox, maxError) {
       });
     }
   }
-  return area;
+  return [area, boxesInPolygon];
+}
+
+
+function renderArea(boxes) {
+  // Render the first box.
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#00fc';
+
+  const box = boxes.shift();
+  console.log(`Filling ${box}`);
+  ctx.fillRect(box[0], box[1], box[2] - box[0], box[3] - box[1]);
+
+  document.getElementById('progress').innerHTML = `${boxes.length}...`;
+  if (boxes.length > 0) {
+    setTimeout(() => { renderArea(boxes); }, 10);
+  }
 }
