@@ -49,9 +49,19 @@ function computePolygon() {
 
   const box = getBoundingBox(rawCoords, adjCoords);
 
+  // TODO: let me step through this...
   setupCanvas(box);
   renderPolygon(rawCoords, '#f008');
   renderPolygon(adjCoords, '#00f8');
+
+  const error = Number(document.getElementById('error').value);
+  if (Number.isNaN(error) || error <= 0 || error >= 0.5) {
+    throw `error ${error} must be within (0, 0.5)`;
+  }
+
+  const area = computeArea(adjCoords, box, error);
+
+  document.getElementById('successOutput').innerHTML = `Area is ${area}`;
 }
 
 /**
@@ -190,4 +200,182 @@ function renderPolygon(coords, color) {
   ctx.beginPath();
   coords.forEach(c => { console.log(`lineTo(${c[0]}, ${c[1]})`); ctx.lineTo(c[0], c[1]); });
   ctx.stroke();
+}
+
+
+// TODO: some of these should probably have tolerances in case points are too
+// close to being on an edge, etc.
+
+
+function vector(ptA, ptB) {
+  return [ptB[0] - ptA[0], ptB[1] - ptA[1]];
+}
+
+
+function crossZ(vA, vB) {
+  return vA[0] * vB[1] - vA[1] * vB[0];
+}
+
+
+function isCross(czA, czB) {
+  return czA * czB < 0;
+}
+
+
+/**
+ * Determines if the line segments between (A, B) and between (P, Q) cross.
+ */
+function linesCross(ptA, ptB, ptP, ptQ) {
+  // This works by computing the z-component of the cross-product between AB and
+  // AP, and then between AB and AQ. If the sign differs, P and Q are on
+  // opposite sides of the line between A and B. It then does the same for PQ
+  // and A, B. If A and B are also on opposite sides of the line between P and
+  // Q, then the line segments cross.
+
+  //console.log(`linesCross ptA=${ptA}, ptB=${ptB}, ptP=${ptP}, ptQ=${ptQ}`);
+  const ab = vector(ptA, ptB);
+  const ap = vector(ptA, ptP);
+  const aq = vector(ptA, ptQ);
+  const zabp = crossZ(ab, ap);
+  const zabq = crossZ(ab, aq);
+  //console.log(`ab=${ab}, ap=${ap}, aq=${aq}, zabp=${zabp}, zabq=${zabq}`);
+  if (!isCross(zabp, zabq)) {
+    return false;
+  }
+
+  const pq = vector(ptP, ptQ);
+  const pa = vector(ptP, ptA);
+  const pb = vector(ptP, ptB);
+  const zpqa = crossZ(pq, pa);
+  const zpqb = crossZ(pq, pb);
+  //console.log(`pq=${pq}, pa=${pa}, pb=${pb}, zpqa=${zpqa}, zpqb=${zpqb}`);
+  return isCross(zpqa, zpqb);
+}
+
+
+/**
+ * box is [minX, minY, maxX, maxY]
+ */
+function subdivide(box) {
+  const minX = box[0];
+  const minY = box[1];
+  const maxX = box[2];
+  const maxY = box[3];
+  const dx = maxX - minX;
+  const dy = maxY - minY;
+  return [
+    [minX, minY + dy / 2, minX + dx / 2, maxY],
+    [minX + dx / 2, minY + dy / 2, maxX, maxY],
+    [minX, minY, minX + dx / 2, minY + dy / 2],
+    [minX + dx / 2, minY, minX + dx / 2, minY + dy / 2]
+  ];
+}
+
+
+function boxArea(box) {
+  return (box[2] - box[0]) * (box[3] - box[1]);
+}
+
+
+/**
+ * Determines if the box is inside the polygon, outside the polygon, or
+ * intersects with it.
+ * Returns 1 if it is inside, 0 if it is outside, and -1 if it intersects with
+ * it.
+ */
+function assessBox(box, polygon, boundingBox) {
+  // box is [minX, minY, maxX, maxY]
+  // polygon is [[x, y], ...]
+  // For each edge in polygon, we'll check if it crosses any edge in box.
+  const minX = box[0];
+  const minY = box[1];
+  const maxX = box[2];
+  const maxY = box[3];
+  const p = [minX, maxY];
+  const q = [maxX, maxY];
+  const r = [maxX, minY];
+  const s = [minX, minY];
+  console.log(`p = ${p}, q = ${q}, r = ${r}, s = ${s}`);
+
+  // First, we'll check if any of the box edges cross any edges of the polygon.
+  // If so, we know it is an indeterminate box.
+  for (var i = 0; i + 1 < polygon.length; ++i) {
+    const ptA = polygon[i];
+    const ptB = polygon[i + 1];
+    // Check for each of the four edges of the box.
+    if (linesCross(ptA, ptB, p, q)
+        || linesCross(ptA, ptB, q, r)
+        || linesCross(ptA, ptB, r, s)
+        || linesCross(ptA, ptB, s, p)) {
+      return -1;
+    }
+  }
+
+  // At this point, the box does not overlap any edge of the polygon, so we need
+  // to determine if the box is inside or outside the polygon. We may as well
+  // determine this for any arbitrary point of the box, so we'll pick point p.
+  // We will count the edges of the polygon a segment between p and a point
+  // outside the bounding box cross.
+  // We need to ensure this line segment does not intersect any vertices on the
+  // polygon. We can detect this by checking if the crossZ value for the vertex
+  // and the line segment is too small.
+  // Pick an external point outside the bounding box.
+  var extP = [boundingBox[2] + 1, boundingBox[3] + 1];
+  // TODO: verify vector p -> extP does not cross a vertex in the polygon.
+  // Count the edges crossed.
+  var edges = 0;
+  for (var i = 0; i + 1 < polygon.length; ++i) {
+    if (linesCross(p, extP, polygon[i], polygon[i + 1])) {
+      edges++;
+    }
+  }
+  if (edges % 2 == 0) {
+    // Crossed an even number of edges, so it is outside the polygon.
+    return 0;
+  }
+  // Crossed an odd number of edges: inside the polygon.
+  return 1;
+}
+
+
+function computeArea(polygon, boundingBox, maxError) {
+  // First, we take the bounding box, and divide it into four quadrants. By
+  // construction, the bounding box fully contains the polygon, but all four
+  // quadrants will either intersect with the polygon or be fully outside the
+  // polygon. And after this step, every subdivision will yield a box that is
+  // either fully outside the polygon, fully inside it, or intersects with it.
+
+  // We will iteratively take each box. If it is outside or inside, we are done.
+  // If it is inside, it counts towards the area of the polygon. If it is
+  // neither, it is subdivided further, and the area counts towards the error.
+  // We will continue subdividing until the cumulative error is small enough.
+
+  // First, seed the list of boxes to check by subdividing the bounding box.
+  const boxes = subdivide(boundingBox);
+  var area = 0;
+  // Initially, all boxes are not yet assessed so they count as possible error.
+  var error = boxes.reduce((acc, box) => acc + boxArea(box), 0);
+
+  // The maximum possible error is the sum of those boxes we have not yet fully
+  // assessed. If that is too large, we'll keep going.
+  while (error > maxError * area) {
+    const box = boxes.shift();
+    error -= boxArea(box);
+    console.log(`Assessing ${box}, error = ${error}, area = ${area}`);
+
+    const assessment = assessBox(box, polygon, boundingBox);
+    console.log(`Assessment = ${assessment}`);
+    if (1 === assessment) {
+      area += boxArea(box);
+    } else if (0 === assessment) {
+      // Do nothing. The box is fully outside the polygon, so we can drop it.
+    } else if (-1 === assessment) {
+      // The box needs to be further subdivided.
+      subdivide(box).forEach(b => {
+          boxes.push(b);
+          error += boxArea(b);
+      });
+    }
+  }
+  return area;
 }
