@@ -61,9 +61,12 @@ function computePolygon() {
 
   const result = computeArea(adjCoords, box, error);
   const area = result[0];
-  const boxes = result[1];
+  const areaError = result[1];
+  const adjArea = area + areaError / 2;
+  const boxes = result[2];
 
-  document.getElementById('successOutput').innerHTML = `Area is ${area}`;
+  document.getElementById('successOutput').innerHTML =
+    `Area is ${area}, areaError = ${areaError}, adjusted area = ${adjArea}`;
 
   // Render the boxes covering the polygon one at a time:
   renderArea(boxes);
@@ -384,7 +387,7 @@ function computeArea(polygon, boundingBox, maxError) {
       });
     }
   }
-  return [area, boxesInPolygon];
+  return [area, error, boxesInPolygon];
 }
 
 
