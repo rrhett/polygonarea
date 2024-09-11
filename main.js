@@ -1,9 +1,18 @@
 document.addEventListener('DOMContentLoaded', function() {
     // todo: Hookup event listeners to dom
-    document.getElementById('compute')
+    document.getElementById('compute_riemann')
         .addEventListener('click', function() {
           try {
-            computePolygon();
+            computePolygon_Riemann();
+          } catch (e) {
+            err(e);
+            throw e;
+          }
+        });
+    document.getElementById('compute_shoelace')
+        .addEventListener('click', function() {
+          try {
+            computePolygon_Shoelace();
           } catch (e) {
             err(e);
             throw e;
@@ -19,7 +28,7 @@ function reset() {
   err('');
 }
 
-function computePolygon() {
+function preCompute() {
   reset();
   // Read in the measurements from 'data'
   // Compute the polygon vertex coordinates
@@ -54,12 +63,20 @@ function computePolygon() {
   renderPolygon(rawCoords, '#f008');
   renderPolygon(adjCoords, '#00f8');
 
+  return [adjCoords, box];
+}
+
+function computePolygon_Riemann() {
+  const precompute = preCompute();
+  const adjCoords = precompute[0];
+  const box = precompute[1];
+
   const error = Number(document.getElementById('error').value);
   if (Number.isNaN(error) || error <= 0 || error >= 0.5) {
     throw `error ${error} must be within (0, 0.5)`;
   }
 
-  const result = computeArea(adjCoords, box, error);
+  const result = computeArea_Riemann(adjCoords, box, error);
   const area = result[0];
   const areaError = result[1];
   const adjArea = area + areaError / 2;
@@ -70,6 +87,25 @@ function computePolygon() {
 
   // Render the boxes covering the polygon one at a time:
   renderArea(boxes);
+}
+
+function computePolygon_Shoelace() {
+  const precompute = preCompute();
+  const adjCoords = precompute[0];
+  const box = precompute[1];
+
+  // No error in shoelace, this is exact.
+  const area = computeArea_Shoelace(adjCoords);
+  document.getElementById('successOutput').innerHTML = `Area is ${area}`;
+
+  // Render the trapezoids covering the polygon one at a time.
+  // I need to start with coords[0] being the left-most point (min x).
+  const minX = Math.min(...adjCoords.map((c) => c[0]));
+  // This will match as I'm comparing the actual value to itself.
+  const minIndex = adjCoords.findIndex((c) => c[0] == minX);
+  const firstHalf = adjCoords.slice(minIndex, adjCoords.length);
+  const secondHalf = adjCoords.slice(0, minIndex + 1);
+  renderArea_Shoelace(firstHalf.concat(secondHalf), box);
 }
 
 /**
@@ -346,7 +382,7 @@ function assessBox(box, polygon, boundingBox) {
 }
 
 
-function computeArea(polygon, boundingBox, maxError) {
+function computeArea_Riemann(polygon, boundingBox, maxError) {
   // First, we take the bounding box, and divide it into four quadrants. By
   // construction, the bounding box fully contains the polygon, but all four
   // quadrants will either intersect with the polygon or be fully outside the
@@ -403,6 +439,53 @@ function renderArea(boxes) {
 
   document.getElementById('progress').innerHTML = `${boxes.length}...`;
   if (boxes.length > 0) {
-    setTimeout(() => { renderArea(boxes); }, 10);
+    setTimeout(() => { renderArea(boxes); }, 50);
+  }
+}
+
+function computeArea_Shoelace(coords) {
+  let area = 0;
+  for (var i = 0; i + 1 < coords.length; ++i) {
+    console.log(`area += ${coords[i][0]}*${coords[i+1][1]} - ${coords[i+1][0]}*${coords[i][1]}`);
+    const dA = (coords[i][0]*coords[i+1][1] - coords[i+1][0]*coords[i][1]);
+    console.log(`area = ${area} + ${dA} = ${area + dA}`);
+    area += dA;
+  }
+  // These are clockwise oriented, so we negate the area to get a positive
+  // value.
+  return -area / 2;
+}
+
+function renderArea_Shoelace(coords, box) {
+  if (coords.length <= 1) {
+    // We need two points to render anything.
+    return;
+  }
+  const P0 = coords.shift();
+  const P1 = coords[0];
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+
+  // If we're adding area, 
+  if (P1[0] > P0[0]) {
+    // Positive direction.
+    ctx.fillStyle = '#00fc';
+  } else {
+    ctx.fillStyle = '#fffc';
+  }
+
+  const region = new Path2D();
+  region.moveTo(P0[0], P0[1]);
+  region.lineTo(P1[0], P1[1]);
+  region.lineTo(P1[0], box[1]);
+  region.lineTo(P0[0], box[1]);
+  region.lineTo(P0[0], P0[1]);
+  region.closePath();
+
+  ctx.fill(region);
+
+  document.getElementById('progress').innerHTML = `${coords.length - 1}...`;
+  if (coords.length > 0) {
+    setTimeout(() => { renderArea_Shoelace(coords, box); }, 100);
   }
 }
