@@ -439,7 +439,7 @@ function renderArea(boxes) {
 
   document.getElementById('progress').innerHTML = `${boxes.length}...`;
   if (boxes.length > 0) {
-    setTimeout(() => { renderArea(boxes); }, 50);
+    setTimeout(() => { renderArea(boxes); }, 10);
   }
 }
 
