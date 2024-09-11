@@ -23,3 +23,8 @@ attributed to the area of the polygon or not.
 This process will be continued until the total area of the remaining
 unattributed cells is less than the configured percent error of the total area
 of the polygon so far computed.
+
+An additional method using the exact Shoelace formula (or Triangle formula) is
+also used.
+
+Both methods also visualize the summation using an HTML Canvas.
